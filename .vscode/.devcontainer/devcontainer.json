@@ -1,0 +1,17 @@
+{
+  "name": "C++ com Raylib",
+  "image": "mcr.microsoft.com/devcontainers/cpp:1-debian-12",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {}
+  },
+  // Este comando roda automaticamente quando o Codespace é criado.
+  // Ele atualiza o sistema e instala a Raylib para Linux e ferramentas gráficas.
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y libraylib-dev libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools"
+      ]
+    }
+  }
+}
