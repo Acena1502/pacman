@@ -2,8 +2,9 @@
     "version": "2.0.0",
     "tasks": [
         {
+            // --- TAREFA 1: PARA WINDOWS (LOCAL) ---
             "type": "cppbuild",
-            "label": "Compilar Projeto (Portátil)",
+            "label": "Compilar no Windows (Local)",
             "command": "gcc",
             "args": [
                 "-fdiagnostics-color=always",
@@ -11,11 +12,8 @@
                 "${file}",
                 "-o",
                 "${fileDirname}\\output\\${fileBasenameNoExtension}.exe",
-              
-              // Caminhos - Raylib
                 "-I", "${workspaceFolder}/vendor/include",
                 "-L", "${workspaceFolder}/vendor/lib",
-                
                 "-lraylib",
                 "-lopengl32",
                 "-lgdi32",
@@ -25,14 +23,30 @@
             "options": {
                 "cwd": "${fileDirname}"
             },
-            "problemMatcher": [
-                "$gcc"
+            "group": "build",
+            "detail": "Usa a pasta vendor (Windows)."
+        },
+        {
+            // --- TAREFA 2: PARA CODESPACES (LINUX) ---
+            "type": "shell",
+            "label": "Compilar no Codespace (Linux)",
+            "command": "/usr/bin/gcc",
+            "args": [
+                "-g",
+                "${file}",
+                "-o",
+                "${fileDirname}/output/${fileBasenameNoExtension}", // Sem .exe no Linux
+                "-lraylib", // Usa a biblioteca instalada no sistema
+                "-lGL",
+                "-lm",
+                "-lpthread",
+                "-ldl",
+                "-lrt",
+                "-lX11",
+                "-Wall"
             ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "detail": "Compilação portátil via GitHub."
+            "group": "build",
+            "detail": "Usa a Raylib do sistema Linux."
         }
     ]
 }
