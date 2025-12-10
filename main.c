@@ -73,6 +73,8 @@ typedef struct {
     double lastPac;     // tempo do ultimo passo do Pacman
     bool power;
     double endPower;
+
+    double temMenSal; // tempo que a mensagem "jogo salvo" ficara visivel
 } Estado;
 
 // ---------------- helpers ----------------
