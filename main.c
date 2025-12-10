@@ -43,8 +43,10 @@ typedef struct { int x,y; } Pos;
 
 typedef struct {
     Pos pos;
+    Pos inicio;
     int vidas;
     int pontuacao;
+    int prox_dir; // 0 up,1 down,2 left,3 right
 } Pacman;
 
 typedef struct {
@@ -123,6 +125,7 @@ char *ler_mapa(const char *arquivo, Pacman *p, Fantasma **outF, int *outN, int *
                 }
                 else if(c == 'P'){
                     p->pos.x = j; p->pos.y = i;
+                    p->inicio.x = j; p->inicio.y = i;
                     map_set(m,j,i,' ');
                 }
                 else {
@@ -214,7 +217,7 @@ void mover_fantasmas(Estado *E, float dt){
     }
 }
 
-// ---------------- intera��o com pellets / power ----------------
+// ---------------- interacao com pellets / power ----------------
 void ao_mover_pac(Estado *E){
     char c = map_get(E->mapa, E->pac.pos.x, E->pac.pos.y);
     if(c == '.'){
@@ -234,7 +237,7 @@ void ao_mover_pac(Estado *E){
     }
 }
 
-// ---------------- colis�es ----------------
+// ---------------- colisoes ----------------
 void checar_colisoes(Estado *E){
     for(int i=0;i<E->nF;i++){
         Fantasma *f = &E->fant[i];
@@ -249,8 +252,8 @@ void checar_colisoes(Estado *E){
                 if(E->pac.pontuacao < 0) E->pac.pontuacao = 0;
 
                 // reposicionar Pac-Man (centro)
-                E->pac.pos.x = COLUNAS/2;
-                E->pac.pos.y = LINHAS/2;
+                E->pac.pos = E->pac.inicio; 
+                E->pac.prox_dir = -1;
 
                 // CORRE��O CR�TICA: reset do temporizador de movimento
                 // para evitar o travamento que voc� descreveu
@@ -360,6 +363,7 @@ void novo_jogo(Estado *E, const char *arquivo){
     E->nivel = 1;
     E->pac.vidas = 3;
     E->pac.pontuacao = 0;
+    E->pac.prox_dir = -1;
     E->pellets = 0;
     E->power = false;
     E->lastPac = GetTime();
@@ -399,7 +403,7 @@ void novo_jogo(Estado *E, const char *arquivo){
 
 // ---------------- main ----------------
 int main(void){
-    InitWindow(AREA_JOGAVEL, AREA_TOTAL, "Pac-Man - TP2 (PDF mode)");
+    InitWindow(AREA_JOGAVEL, AREA_TOTAL, "Pac-Man - PROG2");
     SetTargetFPS(60);
     srand((unsigned)time(NULL));
 
@@ -413,50 +417,70 @@ int main(void){
 
     double last = GetTime();
     while(!WindowShouldClose()){
-        double now = GetTime();
-        float dt = (float)(now - last);
+        double now = GetTime(); // tempo frame
+        float dt = (float)(now - last); // delta time
         last = now;
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
         if(E.tela == TELA_MENU){
-            DrawText("Pac-Man - Menu (N: novo, C: carregar, Q: sair)", 260, 220, 22, BLACK);
+            DrawText("Pac-Man - Menu\nN: novo\nC: carregar\nQ: sair\n", 260, 220, 22, BLACK);
             if(IsKeyPressed(KEY_N)){ novo_jogo(&E, MAPA1_FILE); E.tela = TELA_JOGO; }
             if(IsKeyPressed(KEY_C)){ if(carregar(&E)) E.tela = TELA_JOGO; }
             if(IsKeyPressed(KEY_Q)) break;
         }
         else if(E.tela == TELA_JOGO){
-            // entrada discreta do Pac-Man
-            double tnow = GetTime();
-            if(tnow - E.lastPac >= STEP_PAC){
-                int nx = E.pac.pos.x;
-                int ny = E.pac.pos.y;
-                int dir = -1;
-                if(IsKeyDown(KEY_UP) || IsKeyDown(KEY_W)){ ny--; dir = 0; }
-                else if(IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)){ ny++; dir = 1; }
-                else if(IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)){ nx--; dir = 2; }
-                else if(IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)){ nx++; dir = 3; }
+            // ---------------------------------------------------------
+            //1.1 Responsividade: Nao ter Delay perceptivel
+            //1.1.1: input do buffer
+            if(IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))        E.pac.prox_dir = 0;
+            else if(IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) E.pac.prox_dir = 1;
+            else if(IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) E.pac.prox_dir = 2;
+            else if(IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) E.pac.prox_dir = 3;
 
-                if(dir != -1 && pode_mover(E.mapa, nx, ny)){
-                    E.pac.pos.x = nx;
-                    E.pac.pos.y = ny;
-                    usar_portal(E.mapa, &E.pac.pos, dir);
-                    ao_mover_pac(&E);
+            // else E.pac.prox_dir = -1; (parar ao soltar a tela)
+
+
+            //1.1.2: movimentacao dentro do tempo permitido
+            double pac_now = GetTime();
+            if(pac_now - E.lastPac >= STEP_PAC){
+                
+                int dir = E.pac.prox_dir; // Pega a direção que foi salva no buffer
+                
+                if(dir != -1){
+                    int nx = E.pac.pos.x;
+                    int ny = E.pac.pos.y;
+
+                    // Calcula a proxima posição baseada no buffer
+                    if(dir == 0) ny--;
+                    else if(dir == 1) ny++;
+                    else if(dir == 2) nx--;
+                    else if(dir == 3) nx++;
+
+                    // Verifica se pode mover para lá
+                    if(pode_mover(E.mapa, nx, ny)){
+                        E.pac.pos.x = nx;
+                        E.pac.pos.y = ny;
+                        usar_portal(E.mapa, &E.pac.pos, dir);
+                        ao_mover_pac(&E);
+                    }
                 }
-                E.lastPac = tnow;
+                
+                E.lastPac = pac_now;
             }
+        
 
             // mover fantasmas
             mover_fantasmas(&E, dt);
 
-            // expira��o power
+            // expirar power
             if(E.power && GetTime() >= E.endPower){
                 E.power = false;
                 for(int i=0;i<E.nF;i++) if(E.fant[i].vuln && GetTime() >= E.fant[i].endVuln) E.fant[i].vuln = false;
             }
 
-            // colis�es
+            // colisoes
             checar_colisoes(&E);
 
             // trocar de fase quando pellets zerarem
