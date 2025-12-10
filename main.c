@@ -559,7 +559,7 @@ int main(void){
 
             // se o tempo atual for menor que o salvo + 2, desenha a msg
                 if (E.temMenSal > 0.0 && GetTime() < E.temMenSal + 2.0) {
-                DrawText("JOGO SALVO!", 400, 220, 30, GREEN);
+                DrawText("JOGO SALVO!", 260, 220, 30, GREEN);
                 } else {
                 E.temMenSal = 0.0;
                 }
