@@ -181,6 +181,19 @@ int escolher_dir(char *m,int x,int y,int atual){
     return cand[GetRandomValue(0,n-1)];
 }
 
+bool tem_fantasma_aqui(Estado *E, int x, int y, int id_ignorar) {
+    for (int i = 0; i < E->nF; i++) {
+        if (i == id_ignorar) continue; 
+        // ignora o fantasma atual
+        Fantasma *f = &E->fant[i];
+        
+        //verifica os fantasmas vivos 
+        if (f->alive && f->pos.x == x && f->pos.y == y) {
+            return true;
+        }
+    }
+    return false;
+}
 void mover_fantasmas(Estado *E, float dt){
     for(int i=0;i<E->nF;i++){
         Fantasma *f = &E->fant[i];
@@ -197,7 +210,7 @@ void mover_fantasmas(Estado *E, float dt){
         else dx=1;
 
         int nx = f->pos.x + dx, ny = f->pos.y + dy;
-        if(!pode_mover(E->mapa, nx, ny)){ //add função tem_fantasma_aqui (1.5)
+        if(!pode_mover(E->mapa, nx, ny)|| tem_fantasma_aqui(E, nx, ny, i)){ 
             f->dir = escolher_dir(E->mapa, f->pos.x, f->pos.y, f->dir);
         }
 
@@ -485,24 +498,36 @@ int main(void){
             checar_colisoes(&E);
 
             // trocar de fase quando pellets zerarem
-            if(E.pellets <= 0){
+            
+             if(E.pellets <= 0){
                 E.nivel++;
-                if(E.nivel == 2){ // não perite a evolucao de mapas (1.8)
-                    // tenta carregar mapa2
-                    free(E.mapa); free(E.fant);
-                    Pacman ptmp = E.pac; Fantasma *fv = NULL; int nf=0, pel=0;
-                    char *m = ler_mapa(MAPA2_FILE, &ptmp, &fv, &nf, &pel);
-                    if(m){
-                        E.mapa = m; E.pac = ptmp; E.fant = fv; E.nF = nf; E.pellets = pel;
-                        // garantir que o timer n�o impe�a movimento
-                        E.lastPac = GetTime();
-                    } else {
-                        // se mapa2 n�o existe, reinicia mapa1
-                        novo_jogo(&E, MAPA1_FILE);
-                    }
+                
+                char proximo_mapa[64]; // para o nome do proximo arquivo
+                
+                snprintf(proximo_mapa, sizeof(proximo_mapa), "mapas/mapa%d.txt", E.nivel);
+                // carrega o proximo mapa
+                free(E.mapa); free(E.fant);
+                Pacman ptmp = E.pac; Fantasma *fv = NULL; int nf=0, pel=0;
+                // ler o arquivo 
+                char *m = ler_mapa(proximo_mapa, &ptmp, &fv, &nf, &pel);
+                
+                if(m){
+                    //carrega o proximo nivel
+                    E.mapa = m; E.pac = ptmp; E.fant = fv; E.nF = nf; E.pellets = pel;
+                    
+                    E.pac.pos = E.pac.inicio;
+                    E.pac.prox_dir = -1;
+                    
+                    E.power = false;
+                    
+                    E.lastPac = GetTime();
+                    
                 } else {
-                    // se houver um n�vel 3 (n�o exigido), ou reiniciar
+                    // não existe proximo
                     novo_jogo(&E, MAPA1_FILE);
+
+                    // pontuação bônus por zerar
+                    E.pac.pontuacao += 5000;
                 }
             }
 
@@ -526,9 +551,16 @@ int main(void){
         }
         else if(E.tela == TELA_PAUSA){
             DrawText("PAUSADO (S: salvar, V: voltar, M: menu)", 260, 220, 22, BLACK);
-            if(IsKeyPressed(KEY_S)) salvar(&E);
+            if(IsKeyPressed(KEY_S)) {salvar(&E); E.temMenSal = GetTime();}
             if(IsKeyPressed(KEY_V)) E.tela = TELA_JOGO;
             if(IsKeyPressed(KEY_M)) E.tela = TELA_MENU;
+
+            // se o tempo atual for menor que o salvo + 2, desenha a msg
+                if (E.temMenSal > 0.0 && GetTime() < E.temMenSal + 2.0) {
+                DrawText("JOGO SALVO!", 400, 220, 30, GREEN);
+                } else {
+                E.temMenSal = 0.0;
+                }
         }
 
         EndDrawing();
