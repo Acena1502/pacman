@@ -469,7 +469,8 @@ int main(void){
                 
                 E.lastPac = pac_now;
             }
-        
+            //1.1 Responsividade: Nao ter Delay perceptivel
+            // ---------------------------------------------------------
 
             // mover fantasmas
             mover_fantasmas(&E, dt);
