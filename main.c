@@ -472,9 +472,9 @@ int main(void){
 
             DrawText("BOM JOGO :)", 750, 600, 20,SKYBLUE);//(Color){ 20, 10, 50, 255} );
 
-            DrawRectangleLines(40, 40, AREA_JOGAVEL - 80, AREA_TOTAL - 80, SKYBLUE);//(Color){ 20, 10, 50, 255 });
+            DrawRectangleLines(40, 40, AREA_JOGAVEL - 80, AREA_TOTAL - 80, SKYBLUE);
             DrawRectangleLines(50, 50, AREA_JOGAVEL - 100, AREA_TOTAL - 100, YELLOW);
-            DrawRectangleLines(60, 60, AREA_JOGAVEL - 120, AREA_TOTAL - 120,SKYBLUE); //(Color){ 20, 10, 50, 255 });
+            DrawRectangleLines(60, 60, AREA_JOGAVEL - 120, AREA_TOTAL - 120,SKYBLUE); 
 
             if(IsKeyPressed(KEY_N)){ novo_jogo(&E, MAPA1_FILE); E.tela = TELA_JOGO; }
             if(IsKeyPressed(KEY_C)){ if(carregar(&E)) E.tela = TELA_JOGO; }
