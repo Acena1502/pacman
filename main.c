@@ -421,6 +421,9 @@ void novo_jogo(Estado *E, const char *arquivo){
 // ---------------- main ----------------
 int main(void){
     InitWindow(AREA_JOGAVEL, AREA_TOTAL, "Pac-Man - PROG2");
+    
+    texPac = LoadTexture("pac.png"); 
+    
     SetTargetFPS(60);
     srand((unsigned)time(NULL));
 
