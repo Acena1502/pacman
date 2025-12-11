@@ -692,6 +692,7 @@ int main(void){
             DrawRectangleLines(60, 60, AREA_JOGAVEL - 120, AREA_TOTAL - 120,SKYBLUE);
 
             if(IsKeyPressed(KEY_M)) E.tela = TELA_MENU;
+         }
 
         EndDrawing();
     }
