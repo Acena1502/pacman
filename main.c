@@ -58,7 +58,7 @@ typedef struct {
     bool alive;
 } Fantasma;
 
-typedef enum { TELA_MENU, TELA_JOGO, TELA_PAUSA } Tela;
+typedef enum { TELA_MENU, TELA_JOGO, TELA_PAUSA, TELA_END_GAME} Tela;
 
 typedef struct {
     Pacman pac;
@@ -563,10 +563,8 @@ int main(void){
                     
                 } else {
                     // não existe proximo
-                    novo_jogo(&E, MAPA1_FILE);
-
-                    // pontuação bônus por zerar
                     E.pac.pontuacao += 5000;
+                    E.tela= TELA_END_GAME;
                 }
             }
 
@@ -669,6 +667,31 @@ int main(void){
                 E.temMenSal = 0.0;
                 }
         }
+         else if(E.tela == TELA_END_GAME){
+
+            ClearBackground((Color){ 20, 10, 50, 255 });
+            char buf[128];
+
+            DrawText("FIM DE JOGO", 700 , 280, 30,SKYBLUE); 
+
+            int menu_y_start = 350;
+            int font_size = 30;
+            int line_spacing = 50;
+
+            sprintf(buf, "PONTUAÇÂO FINAL: %06d", E.pac.pontuacao);
+            DrawText(buf, 600, 350, 30, GREEN);
+          
+
+            DrawCircle(710, 465 , 10, MAGENTA);
+            DrawText("M: MENU", 750, menu_y_start + line_spacing * 2, font_size, WHITE);
+
+            DrawText("FOI DIVERTIDO?", 710, 600, 20,SKYBLUE);
+
+            DrawRectangleLines(40, 40, AREA_JOGAVEL - 80, AREA_TOTAL - 80, SKYBLUE);
+            DrawRectangleLines(50, 50, AREA_JOGAVEL - 100, AREA_TOTAL - 100, YELLOW);
+            DrawRectangleLines(60, 60, AREA_JOGAVEL - 120, AREA_TOTAL - 120,SKYBLUE);
+
+            if(IsKeyPressed(KEY_M)) E.tela = TELA_MENU;
 
         EndDrawing();
     }
