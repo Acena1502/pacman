@@ -449,11 +449,11 @@ int main(void){
 
             ClearBackground((Color){ 20, 10, 50, 255 });
 
-            DrawText("PAC-MAN - PROG2", 540, 100, 60, SKYBLUE);//(Color){ 20, 10, 50, 255 } );
+            DrawText("PAC-MAN - PROG2", 540, 100, 60, SKYBLUE);
 
             DrawText("PROJETO FINAL", 700, 170, 30, YELLOW);
 
-            DrawText("MENU", 460, 280, 30,SKYBLUE); //(Color){ 20, 10, 50, 255 });
+            DrawText("MENU", 460, 280, 30,SKYBLUE); 
 
             
             int menu_y_start = 350;
