@@ -1,6 +1,13 @@
 // pacman.c
 // Trabalho Pratico PROG2 (2025/2) - Pac-Man
-// Compilar (MSYS2 UCRT64/w64devkit): gcc pacman.c -o pacman.exe -lraylib -lopengl32 -lgdi32 -lwinmm
+// - 20 linhas x 40 colunas
+// - bloco = 40px
+// - HUD = 40px
+// - janela = 1600 x 840
+// - portais '<' <-> '>' e 'T' (horizontal/vertical)
+// - movimento discreto 4 blocos/s
+// - salvar/carregar bin�rio
+// Compilar (MSYS2 UCRT64): gcc pacman.c -o pacman.exe -lraylib -lopengl32 -lgdi32 -lwinmm
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,17 +16,13 @@
 #include <time.h>
 #include "raylib.h"
 
-
-// Para a entrega final, coloque "//" na frente dela (Modo 1600x840 oficial).
-#define MODO_NOTEBOOK 
-
 #define LINHAS 20
 #define COLUNAS 40
-#define TAM_BLOCO 40   // Mantemos 40px (requisito oficial)
+#define TAM_BLOCO 40
 #define ALTURA_HUD 40
 
 #define AREA_JOGAVEL (COLUNAS * TAM_BLOCO)
-#define AREA_TOTAL   (LINHAS * TAM_BLOCO + ALTURA_HUD)
+#define AREA_TOTAL  (LINHAS * TAM_BLOCO + ALTURA_HUD)
 
 #define MAPA1_FILE "mapas/mapa1.txt"
 #define MAPA2_FILE "mapas/mapa2.txt"
@@ -43,10 +46,7 @@ typedef struct {
     Pos inicio;
     int vidas;
     int pontuacao;
-    
-    // --- CORREÇÃO: Variáveis de Movimento ---
-    int dir;      // Direção atual (Inércia)
-    int prox_dir; // Buffer (Intenção do jogador - Requisito 1.1)
+    int prox_dir; // 0 up,1 down,2 left,3 right
 } Pacman;
 
 typedef struct {
@@ -73,6 +73,8 @@ typedef struct {
     double lastPac;     // tempo do ultimo passo do Pacman
     bool power;
     double endPower;
+
+    double temMenSal; // tempo que a mensagem "jogo salvo" ficara visivel
 } Estado;
 
 // ---------------- helpers ----------------
@@ -87,6 +89,7 @@ bool pode_mover(char *m,int x,int y){
 int oposto(int d){ return d==0?1: d==1?0: d==2?3:2; }
 
 // ---------------- leitura do mapa ----------------
+// aceita: '#', '.', 'o', 'P', 'F'/'G' (fantasmas), '<', '>', 'T'
 char *ler_mapa(const char *arquivo, Pacman *p, Fantasma **outF, int *outN, int *outPel){
     FILE *f = fopen(arquivo, "r");
     if(!f) return NULL;
@@ -109,6 +112,7 @@ char *ler_mapa(const char *arquivo, Pacman *p, Fantasma **outF, int *outN, int *
                     map_set(m,j,i,c);
                 }
                 else if(c == 'F' || c == 'G'){
+                    //. spawn fantasma
                     Fantasma *tmp = realloc(fv, sizeof(Fantasma)*(nf+1));
                     if(!tmp){ free(fv); free(m); fclose(f); return NULL; }
                     fv = tmp;
@@ -132,6 +136,7 @@ char *ler_mapa(const char *arquivo, Pacman *p, Fantasma **outF, int *outN, int *
                 }
             }
         } else {
+            // linha faltando -> preencher com espa�os
             for(int j=0;j<COLUNAS;j++) map_set(m,j,i,' ');
         }
     }
@@ -140,8 +145,9 @@ char *ler_mapa(const char *arquivo, Pacman *p, Fantasma **outF, int *outN, int *
     *outF = fv; *outN = nf; *outPel = pellets;
     return m;
 }
-
 // ---------------- portais ----------------
+// '<' -> '>' and '>' -> '<' global search
+// 'T' -> classical (same row for horizontal, same col for vertical)
 void usar_portal(char *m, Pos *p, int dir){
     char c = map_get(m, p->x, p->y);
     if(c == '<'){
@@ -177,6 +183,19 @@ int escolher_dir(char *m,int x,int y,int atual){
     return cand[GetRandomValue(0,n-1)];
 }
 
+bool tem_fantasma_aqui(Estado *E, int x, int y, int id_ignorar) {
+    for (int i = 0; i < E->nF; i++) {
+        if (i == id_ignorar) continue; 
+        // ignora o fantasma atual
+        Fantasma *f = &E->fant[i];
+        
+        //verifica os fantasmas vivos 
+        if (f->alive && f->pos.x == x && f->pos.y == y) {
+            return true;
+        }
+    }
+    return false;
+}
 void mover_fantasmas(Estado *E, float dt){
     for(int i=0;i<E->nF;i++){
         Fantasma *f = &E->fant[i];
@@ -193,7 +212,7 @@ void mover_fantasmas(Estado *E, float dt){
         else dx=1;
 
         int nx = f->pos.x + dx, ny = f->pos.y + dy;
-        if(!pode_mover(E->mapa, nx, ny)){
+        if(!pode_mover(E->mapa, nx, ny)|| tem_fantasma_aqui(E, nx, ny, i)){ 
             f->dir = escolher_dir(E->mapa, f->pos.x, f->pos.y, f->dir);
         }
 
@@ -213,7 +232,7 @@ void mover_fantasmas(Estado *E, float dt){
     }
 }
 
-// ---------------- interação com pellets ----------------
+// ---------------- interacao com pellets / power ----------------
 void ao_mover_pac(Estado *E){
     char c = map_get(E->mapa, E->pac.pos.x, E->pac.pos.y);
     if(c == '.'){
@@ -233,7 +252,7 @@ void ao_mover_pac(Estado *E){
     }
 }
 
-// ---------------- colisões ----------------
+// ---------------- colisoes ----------------
 void checar_colisoes(Estado *E){
     for(int i=0;i<E->nF;i++){
         Fantasma *f = &E->fant[i];
@@ -247,28 +266,37 @@ void checar_colisoes(Estado *E){
                 E->pac.pontuacao -= 200;
                 if(E->pac.pontuacao < 0) E->pac.pontuacao = 0;
 
-                // resetar posições
+                // reposicionar Pac-Man (centro)
                 E->pac.pos = E->pac.inicio; 
-                
-                // --- CORREÇÃO: Resetar movimento ---
-                E->pac.dir = -1;      // Para parado
-                E->pac.prox_dir = -1; // Limpa intenção
+                E->pac.prox_dir = -1;
+
+                // CORRE��O CR�TICA: reset do temporizador de movimento
+                // para evitar o travamento que voc� descreveu
                 E->lastPac = GetTime();
 
+                // desliga power mode se houver
                 E->power = false;
 
+                // se zerou vidas, reinicia jogo no mapa1
                 if(E->pac.vidas <= 0){
-                    free(E->mapa); free(E->fant);
+                    free(E->mapa);
+                    free(E->fant);
                     Pacman ptmp = E->pac;
                     Fantasma *fv = NULL; int nf = 0, pel = 0;
                     char *m = ler_mapa(MAPA1_FILE, &ptmp, &fv, &nf, &pel);
                     if(m){
-                        E->mapa = m; E->pac = ptmp; E->fant = fv; E->nF = nf; E->pellets = pel;
-                        E->power = false; E->lastPac = GetTime(); E->nivel = 1;
-                        E->pac.dir = -1; E->pac.prox_dir = -1;
+                        E->mapa = m;
+                        E->pac = ptmp;
+                        E->fant = fv;
+                        E->nF = nf;
+                        E->pellets = pel;
+                        E->power = false;
+                        E->lastPac = GetTime();
+                        E->nivel = 1;
                     } else {
-                        // fallback mínimo
-                        E->pac.vidas = 3; E->lastPac = GetTime();
+                        // fallback m�nimo se mapa1 n�o encontrado
+                        E->pac.vidas = 3;
+                        E->lastPac = GetTime();
                     }
                 }
             }
@@ -284,8 +312,8 @@ void desenhar_mapa(Estado *E){
             int y = i * TAM_BLOCO;
             char c = map_get(E->mapa, j, i);
             switch(c){
-                case '#': DrawRectangle(x,y,TAM_BLOCO,TAM_BLOCO, BLUE); break;
-                case '.': DrawCircle(x+TAM_BLOCO/2, y+TAM_BLOCO/2, 4, WHITE); break;
+                case '#': DrawRectangle(x,y,TAM_BLOCO,TAM_BLOCO, (Color){ 20, 10, 50, 255 }); break;
+                case '.': DrawCircle(x+TAM_BLOCO/2, y+TAM_BLOCO/2, 4, ORANGE); break;
                 case 'o': DrawCircle(x+TAM_BLOCO/2, y+TAM_BLOCO/2, TAM_BLOCO/2 - 8, GREEN); break;
                 case '<': case '>': DrawRectangle(x,y,TAM_BLOCO,TAM_BLOCO, PURPLE); break;
                 case 'T': DrawRectangle(x,y,TAM_BLOCO,TAM_BLOCO, MAGENTA); break;
@@ -297,24 +325,16 @@ void desenhar_mapa(Estado *E){
 
 void desenhar_HUD(Estado *E){
     DrawRectangle(0, LINHAS*TAM_BLOCO, AREA_JOGAVEL, ALTURA_HUD, BLACK);
-
-    // --- REQUISITO 1.9: Menu no Rodapé ---
-    if(E->tela == TELA_PAUSA){
-        DrawText("MENU: (V)oltar  (S)alvar  (C)arregar  (N)ovo  (Q)Sair", 
-                 20, LINHAS*TAM_BLOCO + 10, 20, GREEN);
-    } 
-    else {
-        char buf[128];
-        sprintf(buf, "Vidas: %d", E->pac.vidas);
-        DrawText(buf, 8, LINHAS*TAM_BLOCO + 6, 20, WHITE);
-        sprintf(buf, "Pts: %06d", E->pac.pontuacao);
-        DrawText(buf, 200, LINHAS*TAM_BLOCO + 6, 20, WHITE);
-        sprintf(buf, "Nv: %d", E->nivel);
-        DrawText(buf, 450, LINHAS*TAM_BLOCO + 6, 20, WHITE);
-        sprintf(buf, "Pellets: %d", E->pellets);
-        DrawText(buf, 600, LINHAS*TAM_BLOCO + 6, 20, YELLOW);
-        if(E->power) DrawText("POWER", 800, LINHAS*TAM_BLOCO + 6, 20, ORANGE);
-    }
+    char buf[128];
+    sprintf(buf, "Vidas: %d", E->pac.vidas);
+    DrawText(buf, 8, LINHAS*TAM_BLOCO + 6, 20, GREEN);
+    sprintf(buf, "Pontuacao: %06d", E->pac.pontuacao);
+    DrawText(buf, 220, LINHAS*TAM_BLOCO + 6, 20, ORANGE);
+    sprintf(buf, "Nivel: %d", E->nivel);
+    DrawText(buf, 520, LINHAS*TAM_BLOCO + 6, 20, MAGENTA);
+    sprintf(buf, "Pellets: %d", E->pellets);
+    DrawText(buf, 760, LINHAS*TAM_BLOCO + 6, 20, YELLOW);
+    if(E->power) DrawText("POWER", 980, LINHAS*TAM_BLOCO + 6, 20, ORANGE);
 }
 
 // ---------------- salvar / carregar ----------------
@@ -336,6 +356,7 @@ bool carregar(Estado *E){
     fread(&E->nivel, sizeof(int), 1, f);
     fread(&E->pac, sizeof(Pacman), 1, f);
     fread(&E->pellets, sizeof(int), 1, f);
+    // mapa deve j� existir alocado
     if(!E->mapa){
         E->mapa = malloc(LINHAS * COLUNAS);
         if(!E->mapa){ fclose(f); return false; }
@@ -352,16 +373,12 @@ bool carregar(Estado *E){
     return true;
 }
 
-// ---------------- novo jogo ----------------
+// ---------------- novo jogo / carregar niveis ----------------
 void novo_jogo(Estado *E, const char *arquivo){
     E->nivel = 1;
     E->pac.vidas = 3;
     E->pac.pontuacao = 0;
-    
-    // --- CORREÇÃO: Inicializar movimento zerado
-    E->pac.dir = -1; 
     E->pac.prox_dir = -1;
-
     E->pellets = 0;
     E->power = false;
     E->lastPac = GetTime();
@@ -373,9 +390,8 @@ void novo_jogo(Estado *E, const char *arquivo){
     Fantasma *fv = NULL; int nf = 0, pel = 0;
     Pacman ptmp = E->pac;
     char *m = ler_mapa(arquivo, &ptmp, &fv, &nf, &pel);
-    
     if(!m){
-        // fallback (cria mapa simples se arquivo falhar)
+        // fallback: map simples com paredes externas e pellets
         m = malloc(LINHAS * COLUNAS);
         for(int i=0;i<LINHAS;i++){
             for(int j=0;j<COLUNAS;j++){
@@ -402,17 +418,7 @@ void novo_jogo(Estado *E, const char *arquivo){
 
 // ---------------- main ----------------
 int main(void){
-    // --- CONFIGURAÇÃO AUTOMÁTICA DE TELA ---
-    #ifdef MODO_NOTEBOOK
-        // Sua configuração (Zoom in)
-        int larguraJanela = 1280;
-        int alturaJanela = 700;
-        InitWindow(larguraJanela, alturaJanela, "Pac-Man (Modo Notebook)");
-    #else
-        // Configuração Oficial do Trabalho
-        InitWindow(AREA_JOGAVEL, AREA_TOTAL, "Pac-Man - TP2");
-    #endif
-
+    InitWindow(AREA_JOGAVEL, AREA_TOTAL, "Pac-Man - PROG2");
     SetTargetFPS(60);
     srand((unsigned)time(NULL));
 
@@ -424,126 +430,217 @@ int main(void){
 
     novo_jogo(&E, MAPA1_FILE);
 
-    // --- CÂMERA (ZOOM) ---
-    Camera2D cam = { 0 };
-    cam.zoom = 1.0f;
-    #ifdef MODO_NOTEBOOK
-        float scaleX = (float)larguraJanela / AREA_JOGAVEL;
-        float scaleY = (float)alturaJanela / AREA_TOTAL;
-        cam.zoom = (scaleX < scaleY) ? scaleX : scaleY;
-    #endif
-
     double last = GetTime();
     while(!WindowShouldClose()){
-        double now = GetTime();
-        float dt = (float)(now - last);
+        double now = GetTime(); // tempo frame
+        float dt = (float)(now - last); // delta time
         last = now;
 
         BeginDrawing();
-        ClearBackground(RAYWHITE);
-
-        // ATIVA MODO CÂMERA (Zoom)
-        BeginMode2D(cam);
+        ClearBackground((Color){200,229,255,255});
 
         if(E.tela == TELA_MENU){
-            DrawText("Pac-Man - Menu", 260, 220, 40, BLACK);
-            DrawText("Pressione:", 260, 280, 20, DARKGRAY);
-            DrawText("N: Novo Jogo", 260, 310, 20, DARKGRAY);
-            DrawText("C: Carregar", 260, 340, 20, DARKGRAY);
-            DrawText("Q: Sair", 260, 370, 20, DARKGRAY);
+
+            ClearBackground((Color){ 20, 10, 50, 255 });
+
+            DrawText("PAC-MAN - PROG2", 540, 100, 60, SKYBLUE);//(Color){ 20, 10, 50, 255 } );
+
+            DrawText("PROJETO FINAL", 700, 170, 30, YELLOW);
+
+            DrawText("MENU", 460, 280, 30,SKYBLUE); //(Color){ 20, 10, 50, 255 });
+
+            
+            int menu_y_start = 350;
+            int font_size = 30;
+            int line_spacing = 50;
+
+            DrawCircle(460, 365 , 10, GREEN);
+            DrawText("N: NOVO JOGO", 500, menu_y_start, font_size, WHITE);
+
+            DrawCircle(460, 415 , 10, ORANGE);
+            DrawText("C: CARREGAR", 500, menu_y_start + line_spacing, font_size, WHITE);
+
+            DrawCircle(460, 465 , 10, MAGENTA
+            );
+            DrawText("Q: SAIR", 500, menu_y_start + line_spacing * 2, font_size, WHITE);
+
+            DrawText("BOM JOGO :)", 750, 600, 20,SKYBLUE);//(Color){ 20, 10, 50, 255} );
+
+            DrawRectangleLines(40, 40, AREA_JOGAVEL - 80, AREA_TOTAL - 80, SKYBLUE);//(Color){ 20, 10, 50, 255 });
+            DrawRectangleLines(50, 50, AREA_JOGAVEL - 100, AREA_TOTAL - 100, YELLOW);
+            DrawRectangleLines(60, 60, AREA_JOGAVEL - 120, AREA_TOTAL - 120,SKYBLUE); //(Color){ 20, 10, 50, 255 });
 
             if(IsKeyPressed(KEY_N)){ novo_jogo(&E, MAPA1_FILE); E.tela = TELA_JOGO; }
             if(IsKeyPressed(KEY_C)){ if(carregar(&E)) E.tela = TELA_JOGO; }
             if(IsKeyPressed(KEY_Q)) break;
+        
+
         }
         else if(E.tela == TELA_JOGO){
-            // --- REQUISITO 1.1: INPUT NO BUFFER (60 FPS) ---
-            if(IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))    E.pac.prox_dir = 0;
+            // ---------------------------------------------------------
+            //1.1 Responsividade: Nao ter Delay perceptivel
+            //1.1.1: input do buffer
+            if(IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))        E.pac.prox_dir = 0;
             else if(IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S)) E.pac.prox_dir = 1;
             else if(IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) E.pac.prox_dir = 2;
             else if(IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) E.pac.prox_dir = 3;
 
-            // MOVIMENTAÇÃO CONTROLADA POR TEMPO
+            // else E.pac.prox_dir = -1; (parar ao soltar a tela)
+
+
+            //1.1.2: movimentacao dentro do tempo permitido
             double pac_now = GetTime();
             if(pac_now - E.lastPac >= STEP_PAC){
                 
-                // 1. Tenta virar (Buffer)
-                int dx = 0, dy = 0;
-                if(E.pac.prox_dir == 0) dy = -1; else if(E.pac.prox_dir == 1) dy = 1;
-                else if(E.pac.prox_dir == 2) dx = -1; else if(E.pac.prox_dir == 3) dx = 1;
+                int dir = E.pac.prox_dir; // Pega a direção que foi salva no buffer
+                
+                if(dir != -1){
+                    int nx = E.pac.pos.x;
+                    int ny = E.pac.pos.y;
 
-                if(E.pac.prox_dir != -1 && pode_mover(E.mapa, E.pac.pos.x + dx, E.pac.pos.y + dy)){
-                    E.pac.dir = E.pac.prox_dir;
+                    // Calcula a proxima posição baseada no buffer
+                    if(dir == 0) ny--;
+                    else if(dir == 1) ny++;
+                    else if(dir == 2) nx--;
+                    else if(dir == 3) nx++;
+
+                    // Verifica se pode mover para lá
+                    if(pode_mover(E.mapa, nx, ny)){
+                        E.pac.pos.x = nx;
+                        E.pac.pos.y = ny;
+                        usar_portal(E.mapa, &E.pac.pos, dir);
+                        ao_mover_pac(&E);
+                    }
                 }
                 
-                // 2. Tenta seguir reto (Inércia)
-                dx = 0; dy = 0;
-                if(E.pac.dir == 0) dy = -1; else if(E.pac.dir == 1) dy = 1;
-                else if(E.pac.dir == 2) dx = -1; else if(E.pac.dir == 3) dx = 1;
-
-                if(E.pac.dir != -1 && pode_mover(E.mapa, E.pac.pos.x + dx, E.pac.pos.y + dy)){
-                    E.pac.pos.x += dx; E.pac.pos.y += dy;
-                    usar_portal(E.mapa, &E.pac.pos, E.pac.dir);
-                    ao_mover_pac(&E);
-                }
                 E.lastPac = pac_now;
             }
+            //1.1 Responsividade: Nao ter Delay perceptivel
+            // ---------------------------------------------------------
 
+            // mover fantasmas
             mover_fantasmas(&E, dt);
 
+            // expirar power
             if(E.power && GetTime() >= E.endPower){
                 E.power = false;
                 for(int i=0;i<E.nF;i++) if(E.fant[i].vuln && GetTime() >= E.fant[i].endVuln) E.fant[i].vuln = false;
             }
 
+            // colisoes
             checar_colisoes(&E);
 
-            if(E.pellets <= 0){
+            // trocar de fase quando pellets zerarem
+            
+             if(E.pellets <= 0){
                 E.nivel++;
-                if(E.nivel == 2){ // Tenta mapa 2
-                    free(E.mapa); free(E.fant);
-                    Pacman ptmp = E.pac; Fantasma *fv = NULL; int nf=0, pel=0;
-                    char *m = ler_mapa(MAPA2_FILE, &ptmp, &fv, &nf, &pel);
-                    if(m){ 
-                        E.mapa = m; E.pac = ptmp; E.fant = fv; E.nF = nf; E.pellets = pel; 
-                        E.lastPac = GetTime(); E.pac.dir = -1; E.pac.prox_dir = -1;
-                    } 
-                    else { novo_jogo(&E, MAPA1_FILE); }
-                } else { 
-                    novo_jogo(&E, MAPA1_FILE); 
+                
+                char proximo_mapa[64]; // para o nome do proximo arquivo
+                
+                snprintf(proximo_mapa, sizeof(proximo_mapa), "mapas/mapa%d.txt", E.nivel);
+                // carrega o proximo mapa
+                free(E.mapa); free(E.fant);
+                Pacman ptmp = E.pac; Fantasma *fv = NULL; int nf=0, pel=0;
+                // ler o arquivo 
+                char *m = ler_mapa(proximo_mapa, &ptmp, &fv, &nf, &pel);
+                
+                if(m){
+                    //carrega o proximo nivel
+                    E.mapa = m; E.pac = ptmp; E.fant = fv; E.nF = nf; E.pellets = pel;
+                    
+                    E.pac.pos = E.pac.inicio;
+                    E.pac.prox_dir = -1;
+                    
+                    E.power = false;
+                    
+                    E.lastPac = GetTime();
+                    
+                } else {
+                    // não existe proximo
+                    novo_jogo(&E, MAPA1_FILE);
+
+                    // pontuação bônus por zerar
+                    E.pac.pontuacao += 5000;
                 }
             }
 
+            // desenhar mapa, entidades e HUD
             desenhar_mapa(&E);
-            
+
+            // desenhar fantasmas
             for(int i=0;i<E.nF;i++){
-                if(!E.fant[i].alive) continue;
-                Color cor = E.fant[i].vuln ? SKYBLUE : RED;
-                DrawCircle(E.fant[i].pos.x*TAM_BLOCO + TAM_BLOCO/2, E.fant[i].pos.y*TAM_BLOCO + TAM_BLOCO/2, TAM_BLOCO/2 - 4, cor);
+                Fantasma *f = &E.fant[i];
+                if(!f->alive) continue;
+                Color cor = f->vuln ? SKYBLUE : RED;
+                DrawCircle(f->pos.x*TAM_BLOCO + TAM_BLOCO/2, f->pos.y*TAM_BLOCO + TAM_BLOCO/2, TAM_BLOCO/2 - 4, cor);
+            }
+
+            // desenhar pacman
+            DrawCircle(E.pac.pos.x*TAM_BLOCO + TAM_BLOCO/2, E.pac.pos.y*TAM_BLOCO + TAM_BLOCO/2, TAM_BLOCO/2 - 2, YELLOW);
+
+            desenhar_HUD(&E);
+
+            if(IsKeyPressed(KEY_TAB)) E.tela = TELA_PAUSA;
+        }
+        else if(E.tela == TELA_PAUSA){
+
+            ClearBackground((Color){ 20, 10, 50, 255 });
+
+            //desenha o jogo
+            desenhar_mapa(&E);
+
+            for(int i=0;i<E.nF;i++){
+                Fantasma *f = &E.fant[i];
+                if(!f->alive) continue;
+                Color cor = f->vuln ? SKYBLUE : RED;
+                DrawCircle(f->pos.x*TAM_BLOCO + TAM_BLOCO/2, f->pos.y*TAM_BLOCO + TAM_BLOCO/2, TAM_BLOCO/2 - 4, cor);
             }
 
             DrawCircle(E.pac.pos.x*TAM_BLOCO + TAM_BLOCO/2, E.pac.pos.y*TAM_BLOCO + TAM_BLOCO/2, TAM_BLOCO/2 - 2, YELLOW);
             
             desenhar_HUD(&E);
 
-            if(IsKeyPressed(KEY_TAB)) E.tela = TELA_PAUSA;
-        }
-        else if(E.tela == TELA_PAUSA){
-            desenhar_HUD(&E); // Mostra menu no rodapé
+            //desenha a camada translucida
+            DrawRectangle(0, 0, AREA_JOGAVEL, AREA_TOTAL, (Color){ 0, 0, 0, 180 });
 
-            // --- REQUISITO 1.9: Opções do Menu ---
-            if(IsKeyPressed(KEY_V) || IsKeyPressed(KEY_TAB)) E.tela = TELA_JOGO;
-            if(IsKeyPressed(KEY_S)) { salvar(&E); E.tela = TELA_JOGO; }
-            if(IsKeyPressed(KEY_C)) { if(carregar(&E)) E.tela = TELA_JOGO; }
-            if(IsKeyPressed(KEY_N)) { novo_jogo(&E, MAPA1_FILE); E.tela = TELA_JOGO; }
-            if(IsKeyPressed(KEY_Q)) break;
-        }
+            DrawText("O JOGO FOI PAUSADO", 650 , 280, 30,SKYBLUE); 
 
-        EndMode2D(); // Fecha modo Câmera
+            int menu_y_start = 350;
+            int font_size = 30;
+            int line_spacing = 50;
+
+            DrawCircle(710, 365 , 10, GREEN);
+            DrawText("S: SALVAR", 750, menu_y_start, font_size, WHITE);
+
+            DrawCircle(710, 415 , 10, ORANGE);
+            DrawText("V: VOLTAR", 750, menu_y_start + line_spacing, font_size, WHITE);
+
+            DrawCircle(710, 465 , 10, MAGENTA
+            );
+            DrawText("M: MENU", 750, menu_y_start + line_spacing * 2, font_size, WHITE);
+
+            DrawText("NÃO DEMORA!!", 730, 600, 20,SKYBLUE);
+
+            DrawRectangleLines(40, 40, AREA_JOGAVEL - 80, AREA_TOTAL - 80, SKYBLUE);
+            DrawRectangleLines(50, 50, AREA_JOGAVEL - 100, AREA_TOTAL - 100, YELLOW);
+            DrawRectangleLines(60, 60, AREA_JOGAVEL - 120, AREA_TOTAL - 120,SKYBLUE);
+
+            if(IsKeyPressed(KEY_S)) {salvar(&E); E.temMenSal = GetTime();}
+            if(IsKeyPressed(KEY_V)) E.tela = TELA_JOGO;
+            if(IsKeyPressed(KEY_M)) E.tela = TELA_MENU;
+
+            // se o tempo atual for menor que o salvo + 2, desenha a msg
+                if (E.temMenSal > 0.0 && GetTime() < E.temMenSal + 2.0) {
+                DrawText("JOGO SALVO!", 620, 180, 60, GREEN);
+                } else {
+                E.temMenSal = 0.0;
+                }
+        }
 
         EndDrawing();
     }
 
+    // cleanup
     free(E.mapa);
     free(E.fant);
     CloseWindow();
