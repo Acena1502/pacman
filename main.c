@@ -295,6 +295,7 @@ void checar_colisoes(Estado *E){
                         E->power = false;
                         E->lastPac = GetTime();
                         E->nivel = 1;
+                        E->pac.vidas = 3;
                     } else {
                         // fallback m�nimo se mapa1 n�o encontrado
                         E->pac.vidas = 3;
