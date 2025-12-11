@@ -45,25 +45,21 @@ PACMAN/
    ```bash
    git clone https://github.com/SEU_USUARIO/pacman.git
 
-2.**Compile**:
+2. **Compile**:
 Abra a pasta do projeto no VS Code.
 Pressione Ctrl + Shift + B.
 Selecione: "Compilar no Windows (Local)".
 
-3.**Jogue**:
+3. **Jogue**:
 O executável será criado na pasta output.
 Rode no terminal: 
-```bash
-.\output\main.exe
-```
+   ```bash
+   .\output\main.exe
+   ```
 ---
-### Parte 3: Controles, Autores e Créditos
-
-
----
-
-## 🕹️ Controles
 ```markdown
+## 🕹️ Controles
+
 | Tecla | Ação |
 | :---: | :--- |
 | **W / ↑** | Mover para Cima |
