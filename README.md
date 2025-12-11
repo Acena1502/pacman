@@ -57,7 +57,6 @@ Rode no terminal:
    .\output\main.exe
    ```
 ---
-```markdown
 ## 🕹️ Controles
 
 | Tecla | Ação |
@@ -69,5 +68,4 @@ Rode no terminal:
 | **TAB** | Pausar Jogo / Menu |
 | **S** | Salvar Jogo (No Menu) |
 | **C** | Carregar Jogo (No Menu) |
-```
 ---
