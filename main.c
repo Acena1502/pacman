@@ -77,6 +77,8 @@ typedef struct {
     double temMenSal; // tempo que a mensagem "jogo salvo" ficara visivel
 } Estado;
 
+Texture2D texPac;
+
 // ---------------- helpers ----------------
 static inline char map_get(char *m,int x,int y){ return m[y*COLUNAS + x]; }
 static inline void map_set(char *m,int x,int y,char v){ m[y*COLUNAS + x] = v; }
@@ -576,7 +578,34 @@ int main(void){
             }
 
             // desenhar pacman
-            DrawCircle(E.pac.pos.x*TAM_BLOCO + TAM_BLOCO/2, E.pac.pos.y*TAM_BLOCO + TAM_BLOCO/2, TAM_BLOCO/2 - 2, YELLOW);
+            
+            float rotacao = 0.0f;
+
+            switch (E.pac.prox_dir) {
+                case 0: rotacao = 90.0f; break;   // cima
+                case 1: rotacao = 270.0f; break; // baixo
+                case 2: rotacao = 0.0f; break;  // esqueda
+                case 3: rotacao = 180.0f; break; // direita
+                default: rotacao = 0.0f; break;  // Padrão
+            }
+            
+                // desenha imagem inteira
+            Rectangle sourceRec = { 0.0f, 0.0f, (float)texPac.width, (float)texPac.height };
+            float drawSize = (float)TAM_BLOCO - 2; // define a area que a imagem precisa ocupar
+
+            Rectangle destRec = { 
+                E.pac.pos.x * TAM_BLOCO + 1, // x + 1 pixel de offset
+                E.pac.pos.y * TAM_BLOCO + 1, // y + 1 pixel de offset
+                drawSize, // Largura forçada
+                drawSize  // Altura forçada
+            };
+
+            Vector2 origin = { drawSize / 2.0f, drawSize / 2.0f };
+
+            destRec.x += drawSize / 2.0f;
+            destRec.y += drawSize / 2.0f;
+
+            DrawTexturePro(texPac,sourceRec, destRec, origin, rotacao,WHITE);
 
             desenhar_HUD(&E);
 
@@ -641,6 +670,9 @@ int main(void){
     }
 
     // cleanup
+
+    UnloadTexture(texPac);
+    
     free(E.mapa);
     free(E.fant);
     CloseWindow();
